@@ -59,3 +59,5 @@ const deleteVideoFromCloudinary = async (public_id) => {
 };
 
 export { uploadOnCloudinary, deleteFromCloudinary, deleteVideoFromCloudinary };
+
+export default cloudinary;
