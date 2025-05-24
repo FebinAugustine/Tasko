@@ -1,6 +1,6 @@
-// backend/routes/userRoutes.js
+// backend/routes/managerRoutes.js
 import express from "express";
-import { getUserDashboard } from "../controllers/userController.js";
+import { getManagerDashboard } from "../controllers/managerController.js";
 import { protect, authorizeRoles } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -8,8 +8,8 @@ const router = express.Router();
 router.get(
   "/dashboard",
   protect,
-  authorizeRoles("user", "manager", "admin"),
-  getUserDashboard
+  authorizeRoles("manager", "admin"),
+  getManagerDashboard
 );
 
 export default router;

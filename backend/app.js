@@ -1,114 +1,69 @@
+// backend/server.js
 import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import compression from "compression";
-// import rateLimit from "express-rate-limit";
+import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
-
+import cors from "cors"; // For handling CORS with frontend
+import connectDB from "./config/db.js";
+import { notFound, errorHandler } from "./middlewares/errorMiddleware.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
-import projectRoutes from "./routes/projectRoutes.js";
-import taskRoutes from "./routes/taskRoutes.js";
-import reportRoutes from "./routes/reportRoutes.js";
-import notificationRoutes from "./routes/notificationRoutes.js";
-import { notFound, errorHandler } from "./middlewares/errorMiddleware.js";
-import { Server } from "socket.io"; // Import Server class from socket.io
-import http from "http"; // Node.js built-in HTTP module
-import { config } from "dotenv";
+import managerRoutes from "./routes/managerRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import passport from "./utils/googleOAuth.js"; // Import passport for Google OAuth
+import session from "express-session"; // Required for passport sessions
 
-config();
+dotenv.config();
+
+connectDB(); // Connect to MongoDB
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// 1. Basic Express Middleware (should come first)
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(cookieParser());
-app.use(express.static("public"));
+// Middleware
+app.use(express.json()); // Body parser for raw JSON
+app.use(express.urlencoded({ extended: true })); // Body parser for URL-encoded data
+app.use(cookieParser()); // Cookie parser middleware
 
-// 2. Security Middleware
-app.use(helmet());
-app.use(compression());
-
-// Create HTTP server from Express app
-const server = http.createServer(app);
-
-// Initialize Socket.IO server
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CORS_ORIGIN || "*", // Allow requests from specified origin or all for development
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
-  },
-});
-
-// Make `io` instance accessible throughout the app (e.g., in controllers)
-app.set("io", io);
-
-// 3. CORS Configuration (simplified - remove duplicate)
+// CORS Configuration - IMPORTANT for frontend communication
+// Adjust `origin` to your frontend's URL
 app.use(
   cors({
-    origin: [
-      process.env.CORS_ORIGIN || "http://localhost:5173",
-      "https://your-production-domain.com",
-    ],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    exposedHeaders: ["set-cookie"],
+    origin: "http://localhost:3000", // Your frontend URL
+    credentials: true, // Allow cookies to be sent
   })
 );
 
-// Middleware to parse JSON request bodies
-app.use(express.json());
+// Session middleware for Passport (even if not using full sessions for JWT, Passport might need it for initial auth flow)
+app.use(
+  session({
+    secret: process.env.JWT_SECRET, // Use a strong secret
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === "production" }, // Secure cookies in production
+  })
+);
 
-// 4. Rate Limiting (after CORS but before routes)
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 minutes
-//   max: 500, // limit each IP to 500 requests per windowMs
-//   standardHeaders: true, // Return rate limit info in headers
-//   legacyHeaders: false, // Disable X-RateLimit-* headers
-// });
-// app.use(limiter);
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session()); // If you decide to use sessions for some parts of Passport
 
-// 5. API Routes declaration
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/users", userRoutes); // General user routes, including profile picture upload
-// app.use("/api/v1/admin", userRoutes); // Admin-specific user routes handled by userRoutes
-app.use("/api/v1/projects", projectRoutes); // General project routes (e.g., GET single project, GET project tasks)
-app.use("/api/v1/managers", projectRoutes); // Manager/Admin specific project routes (create, update, delete project)
-app.use("/api/v1/tasks", taskRoutes); // All task routes
-app.use("/api/v1/reports", reportRoutes); // All report routes
-app.use("/api/v1/notifications", notificationRoutes); // All notification routes
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/manager", managerRoutes);
+app.use("/api/admin", adminRoutes);
 
-// Socket.IO Connection Logic
-io.on("connection", (socket) => {
-  console.log(`Socket.IO: User connected - ${socket.id}`.green);
-
-  // Join a specific project room
-  socket.on("join_project", (projectId) => {
-    socket.join(`project-${projectId}`);
-    console.log(
-      `Socket.IO: User ${socket.id} joined project room: project-${projectId}`
-        .blue
-    );
-  });
-
-  // Join a specific task room (for detailed task updates)
-  socket.on("join_task", (taskId) => {
-    socket.join(`task-${taskId}`);
-    console.log(
-      `Socket.IO: User ${socket.id} joined task room: task-${taskId}`.blue
-    );
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`Socket.IO: User disconnected - ${socket.id}`.red);
-  });
+// Basic home route
+app.get("/", (req, res) => {
+  res.send("Task Management API is running...");
 });
 
-// Error handling middleware (must be after routes)
+// Error handling middleware
 app.use(notFound);
 app.use(errorHandler);
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 export { app };

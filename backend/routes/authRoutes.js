@@ -1,24 +1,43 @@
-import express from "express"; // No .js needed for npm packages
+// backend/routes/authRoutes.js
+import express from "express";
 import {
   registerUser,
   loginUser,
-  getMe,
-  updateProfile,
-} from "../controllers/authController.js"; // Note the .js extension
-import { protect } from "../middlewares/authMiddleware.js"; // Note the .js extension
+  logoutUser,
+  getUserProfile,
+  setTokenCookie, // Import for Google OAuth callback
+} from "../controllers/authController.js";
+import { protect } from "../middlewares/authMiddleware.js";
+import passport from "../utils/googleOAuth.js"; // Import the configured passport
 
 const router = express.Router();
 
-// Public routes
 router.post("/register", registerUser);
 router.post("/login", loginUser);
+router.post("/logout", protect, logoutUser); // Protect logout to ensure a valid user is logging out
+router.get("/profile", protect, getUserProfile);
 
-// Private routes (require authentication)
-router.get("/me", protect, getMe);
-router.put("/me", protect, updateProfile); // For updating profile details (excluding password and profile picture directly)
+// Google OAuth Routes
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
 
-// Note: Profile picture upload is typically handled via userRoutes or userController
-// as it's a specific user-related update, not just auth.
-// E.g., router.post('/me/upload-picture', protect, uploadProfilePicture); in userRoutes
+router.get(
+  "/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "/login",
+    session: false,
+  }), // session: false because we handle JWT ourselves
+  (req, res) => {
+    // Successful authentication, redirect or respond with token
+    // req.user contains the user object from GoogleStrategy's done()
+    setTokenCookie(res, req.user._id, req.user.role);
+    res.redirect("http://localhost:3000/dashboard"); // Redirect to frontend dashboard or a success page
+    // In a real app, you might want to send a JWT back to the client here,
+    // or redirect to a page that fetches user info.
+    // For simplicity, we are setting the cookie here.
+  }
+);
 
-export default router; // Export the router using ES Modules syntax
+export default router;
